@@ -232,6 +232,22 @@ def login_or_provision_sso_user(username, email=None, display_name=None, groups=
         user = get_user_by_username(username)
 
     if user:
+        # Check if this user record has a fallback 'user_<sub[:8]>' username from an earlier login,
+        # and we now have the actual username from the IdP
+        clean_user = normalize_sso_username(username) if username else None
+        if auth_sub and user['username'].startswith('user_') and clean_user and not clean_user.startswith('user_'):
+            # Check if there is an existing local account matching the real username
+            local_account = get_user_by_username(clean_user)
+            if local_account and local_account['id'] != user['id']:
+                from db_queries.users import delete_user
+                link_user_to_sso(local_account['id'], auth_provider, auth_sub)
+                delete_user(user['username'])
+                user = get_user_by_username(clean_user)
+            else:
+                from db_queries.users import update_username
+                update_username(user['id'], clean_user)
+                user['username'] = clean_user
+
         # Existing account found - link to SSO if needed
         if auth_sub and not user.get('auth_sub'):
             link_user_to_sso(user['id'], auth_provider, auth_sub)

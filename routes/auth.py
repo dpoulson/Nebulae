@@ -213,18 +213,29 @@ def oidc_callback():
         flash('Authentication failed or was canceled. Please try again.', 'danger')
         return redirect(url_for('auth.login'))
 
-    user_info = token.get('userinfo')
-    if not user_info:
-        try:
-            user_info = oauth_client.userinfo(token=token)
-        except Exception as e:
-            logger.error(f"Failed to fetch userinfo from OIDC provider: {e}")
-            user_info = {}
+    # Start with ID token claims (contains sub, iss, etc.)
+    user_info = dict(token.get('userinfo') or {})
+
+    # Always query OIDC userinfo endpoint to retrieve full profile claims (preferred_username, email, groups)
+    try:
+        remote_user_info = oauth_client.userinfo(token=token)
+        if remote_user_info:
+            user_info.update(dict(remote_user_info))
+    except Exception as e:
+        logger.warning(f"Could not fetch OIDC userinfo endpoint: {e}")
+
+    logger.info(f"OIDC claims available: {list(user_info.keys())}")
 
     sub = user_info.get('sub')
-    username = user_info.get('preferred_username') or user_info.get('username') or user_info.get('nickname')
+    username = (
+        user_info.get('preferred_username') or
+        user_info.get('username') or
+        user_info.get('nickname') or
+        user_info.get('upn') or
+        user_info.get('name')
+    )
     email = user_info.get('email')
-    display_name = user_info.get('name') or user_info.get('given_name')
+    display_name = user_info.get('name') or user_info.get('given_name') or username
     groups = user_info.get('groups') or []
 
     if not username and email:
