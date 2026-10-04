@@ -9,7 +9,10 @@ from db_queries.users import (get_user_by_username, create_user_session, delete_
 from utils.auth import check_password, hash_password, is_legacy_hash
 from utils.email_utils import send_email
 from utils.password_validation import validate_password, get_password_requirements_text
-from utils import throttle
+import logging
+logger = logging.getLogger(__name__)
+
+from utils.sso import get_oauth_client, login_or_provision_sso_user
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -147,9 +150,112 @@ def logout():
         user = get_user_by_username(session.get('username'))
         if user:
             delete_session_by_id(session_id, user['id'])
-            
+
+    auth_provider = session.get('auth_provider')
     session.clear()
     flash('You have been logged out.', 'info')
+
+    # If proxy auth logout URL is configured (e.g. Authelia logout)
+    proxy_logout = current_app.config.get('PROXY_AUTH_LOGOUT_URL')
+    if auth_provider == 'proxy' and proxy_logout:
+        return redirect(proxy_logout)
+
+    # If OIDC logout URL is configured
+    oidc_logout = current_app.config.get('OIDC_LOGOUT_URL')
+    if auth_provider == 'oidc' and oidc_logout:
+        return redirect(oidc_logout)
+
+    return redirect(url_for('main.index'))
+
+@auth_bp.route('/auth/oidc/login')
+def oidc_login():
+    """
+    Redirects user to Authelia / OIDC provider authorization endpoint.
+    """
+    if not current_app.config.get('OIDC_ENABLED'):
+        flash('SSO authentication is not enabled.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    oauth_client = get_oauth_client()
+    if not oauth_client:
+        flash('SSO provider client is not configured or unavailable.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    redirect_uri = current_app.config.get('OIDC_REDIRECT_URI')
+    if not redirect_uri:
+        redirect_uri = url_for('auth.oidc_callback', _external=True)
+        # Ensure https scheme if behind TLS-terminating reverse proxy
+        if request.headers.get('X-Forwarded-Proto') == 'https' and redirect_uri.startswith('http://'):
+            redirect_uri = 'https://' + redirect_uri[7:]
+
+    return oauth_client.authorize_redirect(redirect_uri)
+
+@auth_bp.route('/auth/oidc/callback')
+def oidc_callback():
+    """
+    Handles OIDC authorization callback from Authelia.
+    Exchanges code for tokens, retrieves user claims, provisions/links user,
+    and sets up application session.
+    """
+    if not current_app.config.get('OIDC_ENABLED'):
+        flash('SSO authentication is not enabled.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    oauth_client = get_oauth_client()
+    if not oauth_client:
+        flash('SSO provider client is unavailable.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    try:
+        token = oauth_client.authorize_access_token()
+    except Exception as e:
+        logger.error(f"OIDC token exchange failed: {e}")
+        flash('Authentication failed or was canceled. Please try again.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    user_info = token.get('userinfo')
+    if not user_info:
+        try:
+            user_info = oauth_client.userinfo(token=token)
+        except Exception as e:
+            logger.error(f"Failed to fetch userinfo from OIDC provider: {e}")
+            user_info = {}
+
+    sub = user_info.get('sub')
+    username = user_info.get('preferred_username') or user_info.get('username') or user_info.get('nickname')
+    email = user_info.get('email')
+    display_name = user_info.get('name') or user_info.get('given_name')
+    groups = user_info.get('groups') or []
+
+    if not username and email:
+        username = email.split('@')[0]
+    elif not username and sub:
+        username = f"user_{str(sub)[:8]}"
+
+    if not username:
+        logger.error("OIDC callback missing user identifier claim.")
+        flash('Unable to retrieve user identity from SSO provider.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    try:
+        admin_group = current_app.config.get('OIDC_ADMIN_GROUP', 'admins')
+        user = login_or_provision_sso_user(
+            username=username,
+            email=email,
+            display_name=display_name,
+            groups=groups,
+            auth_provider='oidc',
+            auth_sub=sub,
+            admin_group=admin_group
+        )
+    except Exception as e:
+        logger.error(f"Failed to provision or log in SSO user '{username}': {e}")
+        flash('An error occurred during SSO sign-in.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    flash(f"Welcome, {user['display_name']}!", 'success')
+    if session.get('is_admin'):
+        return redirect(url_for('admin.admin_dashboard'))
     return redirect(url_for('main.index'))
 
 def _password_fingerprint(password_hash):
@@ -184,6 +290,11 @@ def forgot_password():
             throttle.record_attempt('reset', email)
 
         if user:
+            # If the account is an SSO account, skip password reset link
+            if user.get('auth_provider') and user.get('auth_provider') != 'local':
+                flash('If an account with that email exists, a password reset link has been sent.', 'info')
+                return redirect(url_for('auth.login'))
+
             # Generate a password reset token
             s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
             token = s.dumps(

@@ -67,6 +67,7 @@ nav:
       - Post-Install Setup: admin-guide/post-install.md
       - User Management: admin-guide/user-management.md
       - Federation Setup: admin-guide/federation-setup.md
+      - Authelia SSO: admin-guide/authelia-sso.md
   - User Guide:
       - Getting Started: user-guide/getting-started.md
       - Groups: user-guide/groups.md

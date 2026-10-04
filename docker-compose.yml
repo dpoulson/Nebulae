@@ -38,6 +38,27 @@ services:
       # Optional: Set to production
       - FLASK_ENV=production
       - LOG_LEVEL=INFO
+      # Enable ProxyFix when running behind reverse proxies (Traefik, NGINX, Caddy)
+      # - USE_PROXY_FIX=True
+
+      # --- Authelia Single Sign-On: Option A (OpenID Connect / OIDC) ---
+      # - OIDC_ENABLED=True
+      # - OIDC_CLIENT_ID=nebulae
+      # - OIDC_CLIENT_SECRET=YOUR_OIDC_CLIENT_SECRET
+      # - OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
+      # - OIDC_PROVIDER_NAME=Authelia
+      # - OIDC_ADMIN_GROUP=admins
+      # - OIDC_LOGOUT_URL=https://auth.example.com/logout
+
+      # --- Authelia Single Sign-On: Option B (Reverse Proxy ForwardAuth) ---
+      # - PROXY_AUTH_ENABLED=True
+      # - PROXY_AUTH_USER_HEADER=Remote-User
+      # - PROXY_AUTH_EMAIL_HEADER=Remote-Email
+      # - PROXY_AUTH_NAME_HEADER=Remote-Name
+      # - PROXY_AUTH_GROUPS_HEADER=Remote-Groups
+      # - PROXY_AUTH_ADMIN_GROUP=admins
+      # - PROXY_AUTH_TRUSTED_PROXIES=127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      # - PROXY_AUTH_LOGOUT_URL=https://auth.example.com/logout
     restart: unless-stopped
     command: gunicorn --bind 0.0.0.0:5000 --worker-class gthread --workers 2 --threads 4 --timeout 120 --access-logfile - --error-logfile - "app:app"
 

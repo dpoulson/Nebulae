@@ -39,6 +39,9 @@ def setup_2fa():
     data = request.get_json()
     current_password = data.get('current_password')
     
+    if user.get('auth_provider') and user.get('auth_provider') != 'local':
+        return jsonify({'error': 'Two-factor authentication is managed by your SSO identity provider.'}), 400
+
     # Verify current password
     if not check_password(user['password'], current_password):
         return jsonify({'error': 'Incorrect password'}), 403

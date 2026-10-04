@@ -5,3 +5,5 @@ scripts/localise_assets.py
 scripts/convert_prints.py
 *.bak
 *.pyc
+__pycache__/
+instance/

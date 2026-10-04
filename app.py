@@ -40,6 +40,7 @@ from utils.text_processing import linkify_everyone_mention # XSS FIX: replaces t
 from routes.push_notifications import push_notifications_bp
 from routes.parental import parental_bp
 from routes.shortcuts import shortcuts_bp
+from utils.sso import init_sso, is_trusted_proxy, login_or_provision_sso_user
 
 # Application version
 __version__ = "0.9.6.6-beta"
@@ -159,6 +160,7 @@ app.teardown_appcontext(close_db)
 # Call init_db() when the application starts
 with app.app_context():
     init_db(app) # Pass app to init_db for app.open_resource
+    init_sso(app) # Initialize Single Sign-On (OIDC & Proxy Auth)
 
 # Start the background scheduler for periodic tasks
 from utils.scheduler import scheduler
@@ -299,6 +301,35 @@ def before_request_tasks():
     It's used here to trigger daily tasks, validate sessions,
     and load request-scoped context.
     """
+    # 0. Proxy Authentication (ForwardAuth) if enabled
+    if current_app.config.get('PROXY_AUTH_ENABLED'):
+        user_header = current_app.config.get('PROXY_AUTH_USER_HEADER', 'Remote-User')
+        remote_user = request.headers.get(user_header)
+        if remote_user:
+            trusted_proxies = current_app.config.get('PROXY_AUTH_TRUSTED_PROXIES')
+            if is_trusted_proxy(request.remote_addr, trusted_proxies):
+                secret_hdr = current_app.config.get('PROXY_AUTH_SECRET_HEADER')
+                secret_val = current_app.config.get('PROXY_AUTH_SECRET_VALUE')
+                if not secret_hdr or request.headers.get(secret_hdr) == secret_val:
+                    curr_user = session.get('username')
+                    if curr_user != remote_user or 'session_id' not in session:
+                        email_hdr = current_app.config.get('PROXY_AUTH_EMAIL_HEADER', 'Remote-Email')
+                        name_hdr = current_app.config.get('PROXY_AUTH_NAME_HEADER', 'Remote-Name')
+                        groups_hdr = current_app.config.get('PROXY_AUTH_GROUPS_HEADER', 'Remote-Groups')
+                        admin_grp = current_app.config.get('PROXY_AUTH_ADMIN_GROUP', 'admins')
+                        try:
+                            login_or_provision_sso_user(
+                                username=remote_user,
+                                email=request.headers.get(email_hdr),
+                                display_name=request.headers.get(name_hdr),
+                                groups=request.headers.get(groups_hdr),
+                                auth_provider='proxy',
+                                auth_sub=f"proxy:{remote_user}",
+                                admin_group=admin_grp
+                            )
+                        except Exception as e:
+                            logger.error(f"Proxy authentication failed for {remote_user}: {e}")
+
     # 1. Validate the current user's session
     if 'session_id' in session:
         session_valid = get_session_by_id(session['session_id'])

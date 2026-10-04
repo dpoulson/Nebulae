@@ -19,7 +19,7 @@ from utils.auth import hash_password
 # Using 'SELECT *' can sometimes be unreliable if the table schema changes
 # or in certain database configurations.
 # MODIFICATION: Add the new 'email' column to the list of columns to be fetched.
-USER_COLUMNS = "id, puid, username, password, email, display_name, user_type, hostname, password_must_change, media_path, uploads_path, profile_picture_path, original_profile_picture_path, cover_picture_path"
+USER_COLUMNS = "id, puid, username, password, email, display_name, user_type, hostname, password_must_change, media_path, uploads_path, profile_picture_path, original_profile_picture_path, cover_picture_path, auth_provider, auth_sub"
 
 def get_user_by_username(username):
     """
@@ -655,5 +655,103 @@ def delete_all_sessions_for_user(user_id, exclude_session_id=None):
         return True
     except sqlite3.Error as e:
         print(f"Database error in delete_all_sessions_for_user: {e}")
+        db.rollback()
+        return False
+
+# --- Single Sign-On (SSO) Support Functions ---
+
+def get_user_by_auth_sub(auth_sub):
+    """Retrieves a local user by their SSO subject identifier."""
+    if not auth_sub:
+        return None
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        query = f"SELECT {USER_COLUMNS} FROM users WHERE auth_sub = ? AND hostname IS NULL"
+        cursor.execute(query, (str(auth_sub),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except sqlite3.OperationalError as e:
+        logger.warning(f"Database error in get_user_by_auth_sub for '{auth_sub}': {e}")
+        return None
+
+def add_sso_user(username, email=None, display_name=None, user_type='user', auth_provider='oidc', auth_sub=None):
+    """Adds a new SSO user to the database (password is NULL, local account)."""
+    db = get_db()
+    puid = str(uuid.uuid4())
+    display = display_name or username
+    email_addr = email or username
+    try:
+        cursor = db.cursor()
+        cursor.execute("""
+            INSERT INTO users (puid, username, email, password, display_name, user_type, hostname, auth_provider, auth_sub)
+            VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, ?)
+        """, (puid, username, email_addr, display, user_type, auth_provider, str(auth_sub) if auth_sub else None))
+        user_id = cursor.lastrowid
+
+        default_profile_fields = ['dob', 'hometown', 'occupation', 'bio', 'show_username']
+        for field_name in default_profile_fields:
+            db.execute(
+                "INSERT INTO user_profile_info (user_id, field_name, field_value, privacy_public, privacy_local, privacy_friends) VALUES (?, ?, NULL, 0, 0, 0)",
+                (user_id, field_name)
+            )
+
+        db.commit()
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.warning(f"Integrity error creating SSO user '{username}': {e}")
+        return False
+
+def link_user_to_sso(user_id, auth_provider, auth_sub):
+    """Links an existing local user account to an SSO identity."""
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute(
+            "UPDATE users SET auth_provider = ?, auth_sub = ? WHERE id = ? AND hostname IS NULL",
+            (auth_provider, str(auth_sub) if auth_sub else None, user_id)
+        )
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logger.error(f"Error linking user {user_id} to SSO: {e}")
+        db.rollback()
+        return False
+
+def update_user_role(user_id, user_type):
+    """Updates a user's role ('admin' or 'user')."""
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("UPDATE users SET user_type = ? WHERE id = ? AND hostname IS NULL", (user_type, user_id))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logger.error(f"Error updating role for user {user_id}: {e}")
+        db.rollback()
+        return False
+
+def update_user_sso_info(user_id, display_name=None, email=None):
+    """Updates display name and/or email for an SSO user."""
+    db = get_db()
+    cursor = db.cursor()
+    updates = []
+    params = []
+    if display_name:
+        updates.append("display_name = ?")
+        params.append(display_name)
+    if email:
+        updates.append("email = ?")
+        params.append(email)
+    if not updates:
+        return False
+    params.append(user_id)
+    try:
+        query = f"UPDATE users SET {', '.join(updates)} WHERE id = ? AND hostname IS NULL"
+        cursor.execute(query, tuple(params))
+        db.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        logger.error(f"Error updating SSO info for user {user_id}: {e}")
         db.rollback()
         return False

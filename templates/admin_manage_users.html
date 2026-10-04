@@ -82,6 +82,9 @@
                                         {{ user.username }}
                                     </a>
                                 {% endif %}
+                                {% if user.auth_provider and user.auth_provider != 'local' %}
+                                    <span class="ml-2 bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300 py-0.5 px-2 rounded-full text-xs whitespace-nowrap font-medium" title="Authenticated via {{ user.auth_provider | upper }}">SSO</span>
+                                {% endif %}
                             </div>
                         </td>
                         <td class="py-3 px-4 text-left hidden md:table-cell">

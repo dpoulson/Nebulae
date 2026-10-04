@@ -78,6 +78,9 @@ def update_account_credentials():
     new_username = data.get('username')
     new_password = data.get('password')
 
+    if user.get('auth_provider') and user.get('auth_provider') != 'local':
+        return jsonify({'error': 'Account credentials are managed by your SSO identity provider.'}), 400
+
     if not check_password(user['password'], current_password):
         return jsonify({'error': 'The current password you entered is incorrect.'}), 403
 
