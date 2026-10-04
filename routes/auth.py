@@ -9,6 +9,7 @@ from db_queries.users import (get_user_by_username, create_user_session, delete_
 from utils.auth import check_password, hash_password, is_legacy_hash
 from utils.email_utils import send_email
 from utils.password_validation import validate_password, get_password_requirements_text
+from utils import throttle
 import logging
 logger = logging.getLogger(__name__)
 
