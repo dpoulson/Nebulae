@@ -44,6 +44,11 @@ environment:
 | `OIDC_LOGOUT_URL` | Redirect target on logout for single sign-out | `None` |
 | `OIDC_REDIRECT_URI` | Explicit callback URI (optional) | `https://<NODE_HOSTNAME>/auth/oidc/callback` |
 
+!!! warning "Important: Ensure `profile` and `email` Scopes Are Allowed"
+    Identity Providers (like Authelia, Authentik, and Keycloak) only include basic token claims (`sub`, `iss`, `aud`) in the ID token. The actual user attributes (`preferred_username`, `email`, `name`, `groups`) are served from the OIDC `/userinfo` endpoint and **require** the `profile` and `email` scopes.
+
+    Ensure that your IdP client definition includes `profile` and `email` in its allowed scopes. If `profile` is omitted, the IdP will withhold the username, causing Nebulae to fall back to a generated subject identifier (e.g. `user_31384f72`).
+
 ---
 
 ### Identity Provider Examples
@@ -124,3 +129,5 @@ environment:
 * **Just-In-Time Provisioning**: New SSO users are automatically created on their first login, with profile defaults and media folders initialized.
 * **Automatic Account Linking**: If an existing local user has the same username or email, Nebulae automatically links the account to SSO on login.
 * **Role Synchronization**: If the user belongs to the configured admin group in the identity provider, Nebulae automatically synchronizes `admin` permissions on each login.
+* **Username Resolution**: Nebulae checks claims in order of priority: `preferred_username` &rarr; `username` &rarr; `nickname` &rarr; `upn` &rarr; `name` &rarr; `email` prefix &rarr; `user_<sub[:8]>` (fallback).
+* **Automatic Fallback Recovery**: If an account was previously created with a temporary fallback name (`user_xxxxxx`) due to missing scopes, Nebulae will automatically rename it or link it to the matching local account once the correct claims are received on the next login.
