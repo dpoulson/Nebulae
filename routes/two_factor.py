@@ -25,10 +25,18 @@ def get_2fa_status():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
+    if user.get('auth_provider') and user.get('auth_provider') != 'local':
+        return jsonify({
+            'enabled': False,
+            'is_sso': True,
+            'message': 'Two-factor authentication is managed by your SSO Identity Provider.'
+        })
+
     twofa_settings = get_2fa_settings(user['id'])
     
     return jsonify({
-        'enabled': twofa_settings['enabled'] if twofa_settings else False
+        'enabled': twofa_settings['enabled'] if twofa_settings else False,
+        'is_sso': False
     })
 
 @two_factor_bp.route('/settings/2fa/setup', methods=['POST'])
@@ -117,6 +125,9 @@ def disable_2fa_route():
     current_password = data.get('current_password')
     otp_code = data.get('otp_code')
     
+    if user.get('auth_provider') and user.get('auth_provider') != 'local':
+        return jsonify({'error': 'Two-factor authentication is managed by your SSO identity provider.'}), 400
+
     # Verify password
     if not check_password(user['password'], current_password):
         return jsonify({'error': 'Incorrect password'}), 403

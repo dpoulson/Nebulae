@@ -515,6 +515,17 @@
                     </button>
                     <div class="settings-accordion-panel">
                         <div id="accountSettingsMessage" class="hidden mt-4"></div>
+                        {% if current_user and current_user.auth_provider and current_user.auth_provider != 'local' %}
+                        <div class="p-4 my-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-sm">
+                            <div class="flex items-center gap-2 font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                <span>Single Sign-On Account</span>
+                            </div>
+                            <p class="text-blue-700 dark:text-blue-400">
+                                This account is authenticated via {{ current_user.auth_provider | upper }}. Account credentials and passwords are managed through your Identity Provider and cannot be modified here.
+                            </p>
+                        </div>
+                        {% else %}
                         <form id="accountSettingsForm" class="space-y-4 pt-4">
                             <div>
                                 <label for="newUsername" class="block text-sm font-medium">Username (Email)</label>
@@ -544,6 +555,7 @@
                                 <button type="button" id="saveAccountSettingsBtn" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg">Save Account Settings</button>
                             </div>
                         </form>
+                        {% endif %}
                     </div>
                 </div>
                 <!-- Accordion Item 3: Two-Factor Authentication -->
@@ -565,6 +577,17 @@
                     </button>
                     <div class="settings-accordion-panel">
                         <div class="pt-4">
+                            {% if current_user and current_user.auth_provider and current_user.auth_provider != 'local' %}
+                            <div class="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 text-sm">
+                                <div class="flex items-center gap-2 font-semibold text-blue-800 dark:text-blue-300 mb-1">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                                    <span>MFA Managed by Identity Provider</span>
+                                </div>
+                                <p class="text-blue-700 dark:text-blue-400">
+                                    Multi-factor authentication for this account is managed directly by your Identity Provider ({{ current_user.auth_provider | upper }}).
+                                </p>
+                            </div>
+                            {% else %}
                             <div id="twofa-status-container">
                                 <p class="secondary-text mb-4">
                                     <span class="inline-block">
@@ -575,6 +598,7 @@
                                     Loading 2FA status...
                                 </p>
                             </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>                

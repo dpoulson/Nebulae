@@ -382,13 +382,16 @@ def inject_user_data_functions():
     
     unread_messages_count = 0  # ← add this initialisation next to unread_notifications = 0
 
+    current_user = None
+
     if session.get('is_federated_viewer'):
         federated_settings = session.get('federated_viewer_settings')
         if federated_settings:
             user_settings.update(federated_settings)
     elif 'username' in session:
-        user_id = get_user_id_by_username(session['username'])
-        if user_id:
+        current_user = get_user_by_username(session['username'])
+        if current_user:
+            user_id = current_user['id']
             unread_notifications = get_unread_notification_count(user_id)
             user_settings = get_user_settings(user_id)
             from db_queries.conversations import get_unread_conversation_count_for_user
@@ -667,6 +670,7 @@ def inject_user_data_functions():
         federated_event_picture_url=federated_event_picture_url,
         # NEW: Make user settings available in all templates
         user_settings=user_settings,
+        current_user=current_user,
         is_parent=is_parent,
         pending_approvals_count=pending_approvals_count
     )
