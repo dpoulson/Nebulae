@@ -21,8 +21,6 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE(username, hostname) -- A user from a specific node is unique.
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_auth_sub ON users(auth_sub);
-CREATE INDEX IF NOT EXISTS idx_users_auth_provider ON users(auth_provider);
 
 -- NEW: Table for user sessions
 CREATE TABLE IF NOT EXISTS user_sessions (
