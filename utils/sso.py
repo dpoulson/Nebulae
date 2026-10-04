@@ -92,7 +92,7 @@ def init_sso(app):
 
     app.config.setdefault(
         'OIDC_PROVIDER_NAME',
-        os.environ.get('OIDC_PROVIDER_NAME', 'Authelia')
+        os.environ.get('OIDC_PROVIDER_NAME', 'SSO')
     )
     app.config.setdefault(
         'OIDC_SCOPES',
@@ -133,7 +133,7 @@ def init_sso(app):
 
             oauth = OAuth(app)
             _oauth_client = oauth.register(
-                name='authelia',
+                name='oidc',
                 client_id=oidc_client_id,
                 client_secret=oidc_client_secret,
                 server_metadata_url=formatted_discovery_url,

@@ -41,16 +41,16 @@ services:
       # Enable ProxyFix when running behind reverse proxies (Traefik, NGINX, Caddy)
       # - USE_PROXY_FIX=True
 
-      # --- Authelia Single Sign-On: Option A (OpenID Connect / OIDC) ---
+      # --- Single Sign-On (SSO): OpenID Connect (Authelia, Authentik, Keycloak, etc.) ---
       # - OIDC_ENABLED=True
       # - OIDC_CLIENT_ID=nebulae
       # - OIDC_CLIENT_SECRET=YOUR_OIDC_CLIENT_SECRET
       # - OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
-      # - OIDC_PROVIDER_NAME=Authelia
+      # - OIDC_PROVIDER_NAME=SSO
       # - OIDC_ADMIN_GROUP=admins
       # - OIDC_LOGOUT_URL=https://auth.example.com/logout
 
-      # --- Authelia Single Sign-On: Option B (Reverse Proxy ForwardAuth) ---
+      # --- Single Sign-On (SSO): Reverse Proxy ForwardAuth (Traefik, NGINX, Caddy, Cloudflare Access) ---
       # - PROXY_AUTH_ENABLED=True
       # - PROXY_AUTH_USER_HEADER=Remote-User
       # - PROXY_AUTH_EMAIL_HEADER=Remote-Email
