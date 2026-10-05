@@ -126,8 +126,8 @@ environment:
 
 ## Account Provisioning & Synchronization
 
-* **Just-In-Time Provisioning**: New SSO users are automatically created on their first login, with profile defaults and media folders initialized.
-* **Automatic Account Linking**: If an existing local user has the same username or email, Nebulae automatically links the account to SSO on login.
-* **Role Synchronization**: If the user belongs to the configured admin group in the identity provider, Nebulae automatically synchronizes `admin` permissions on each login.
+* **Just-In-Time Provisioning**: New SSO users are automatically created on their first login, with profile defaults and media folders initialized. If an IdP username collides with an existing account, a unique numerical suffix is appended to preserve account isolation.
+* **Account Isolation**: SSO accounts are bound to the IdP subject identifier (`sub`). Local password accounts cannot be silently hijacked by external SSO identities.
+* **Role Synchronization**: If the user belongs to the configured admin group in the identity provider, Nebulae automatically synchronizes `admin` permissions on each login and request.
 * **Username Resolution**: Nebulae checks claims in order of priority: `preferred_username` &rarr; `username` &rarr; `nickname` &rarr; `upn` &rarr; `name` &rarr; `email` prefix &rarr; `user_<sub[:8]>` (fallback).
-* **Automatic Fallback Recovery**: If an account was previously created with a temporary fallback name (`user_xxxxxx`) due to missing scopes, Nebulae will automatically rename it or link it to the matching local account once the correct claims are received on the next login.
+* **Automatic Fallback Recovery**: If an account was previously created with a temporary fallback name (`user_xxxxxx`) due to missing scopes, Nebulae will automatically rename it to the resolved IdP username on the next login once claims are available, provided the name is not taken.

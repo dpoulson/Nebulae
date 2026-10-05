@@ -87,6 +87,11 @@ def login():
             # Fall through to login completion below
             
         elif user and check_password(user['password'], password):
+            # Block password login if the account is managed by SSO
+            if user.get('auth_provider') and user.get('auth_provider') != 'local':
+                flash('This account is managed via Single Sign-On. Please sign in using your SSO provider.', 'warning')
+                return render_template('login.html')
+
             # SECURITY: transparently upgrade legacy unsalted SHA-256 hashes.
             # The plaintext is only available here, at login, so this is the one
             # place the migration can happen. It runs once per user - after the
@@ -228,6 +233,11 @@ def oidc_callback():
     logger.info(f"OIDC claims available: {list(user_info.keys())}")
 
     sub = user_info.get('sub')
+    if not sub:
+        logger.error("OIDC callback missing mandatory user subject identifier claim ('sub').")
+        flash('Unable to retrieve user identity from SSO provider.', 'danger')
+        return redirect(url_for('auth.login'))
+
     username = (
         user_info.get('preferred_username') or
         user_info.get('username') or

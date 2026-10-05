@@ -116,7 +116,14 @@ def init_sso(app):
     if use_proxy_fix or app.config.get('PROXY_AUTH_ENABLED'):
         try:
             from werkzeug.middleware.proxy_fix import ProxyFix
-            app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+            class RawPeerProxyFix(ProxyFix):
+                def __call__(self, environ, start_response):
+                    # Capture physical socket peer IP before ProxyFix rewrites REMOTE_ADDR
+                    environ['RAW_REMOTE_ADDR'] = environ.get('REMOTE_ADDR')
+                    return super().__call__(environ, start_response)
+
+            app.wsgi_app = RawPeerProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
             logger.info("ProxyFix middleware enabled for reverse proxy support.")
         except Exception as e:
             logger.warning(f"Could not enable ProxyFix: {e}")
@@ -219,49 +226,28 @@ def login_or_provision_sso_user(username, email=None, display_name=None, groups=
 
     user = None
 
-    # 1. Lookup by explicit auth_sub
+    # 1. Lookup solely by explicit auth_sub to prevent hijacking existing local accounts
     if auth_sub:
         user = get_user_by_auth_sub(auth_sub)
 
-    # 2. Lookup by email if available and not yet found
-    if not user and email:
-        user = get_user_by_email(email)
-
-    # 3. Lookup by username if not yet found
-    if not user and username:
-        user = get_user_by_username(username)
-
     if user:
         # Check if this user record has a fallback 'user_<sub[:8]>' username from an earlier login,
-        # and we now have the actual username from the IdP
+        # and we now have the actual username from the IdP. Only rename if not colliding with another user.
         clean_user = normalize_sso_username(username) if username else None
-        if auth_sub and user['username'].startswith('user_') and clean_user and not clean_user.startswith('user_'):
-            # Check if there is an existing local account matching the real username
-            local_account = get_user_by_username(clean_user)
-            if local_account and local_account['id'] != user['id']:
-                from db_queries.users import delete_user
-                link_user_to_sso(local_account['id'], auth_provider, auth_sub)
-                delete_user(user['username'])
-                user = get_user_by_username(clean_user)
-            else:
+        if user['username'].startswith('user_') and clean_user and not clean_user.startswith('user_'):
+            if get_user_by_username(clean_user) is None:
                 from db_queries.users import update_username
                 update_username(user['id'], clean_user)
                 user['username'] = clean_user
 
-        # Existing account found - link to SSO if needed
-        if auth_sub and not user.get('auth_sub'):
-            link_user_to_sso(user['id'], auth_provider, auth_sub)
-            user['auth_sub'] = auth_sub
-            user['auth_provider'] = auth_provider
-
-        # Synchronize admin status
-        if is_admin and user['user_type'] != 'admin':
-            update_user_role(user['id'], 'admin')
-            user['user_type'] = 'admin'
-        elif not is_admin and user['user_type'] == 'admin' and user.get('auth_provider') != 'local':
-            # Downgrade if removed from admin group in SSO (only for SSO accounts)
-            update_user_role(user['id'], 'user')
-            user['user_type'] = 'user'
+        # Synchronize admin status for SSO accounts
+        if user.get('auth_provider') != 'local':
+            if is_admin and user['user_type'] != 'admin':
+                update_user_role(user['id'], 'admin')
+                user['user_type'] = 'admin'
+            elif not is_admin and user['user_type'] == 'admin':
+                update_user_role(user['id'], 'user')
+                user['user_type'] = 'user'
 
         # Update display name / email if not already present
         updates = {}
